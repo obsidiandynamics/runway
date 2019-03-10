@@ -1,0 +1,4 @@
+residentTtl: 5000
+residentCapacity: 1000
+cacheTtl: 10000
+cacheCapacity: 2000

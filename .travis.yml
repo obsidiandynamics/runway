@@ -7,7 +7,7 @@ jdk:
   - openjdk11
 
 install:
-  - travis_retry ./gradlew --info :dependencies runway-capacitor:dependencies --refresh-dependencies 
+  - travis_retry ./gradlew --info dependencies --refresh-dependencies 
 
 script:
   - ./gradlew build verify javadocJar --stacktrace --info

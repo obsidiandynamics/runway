@@ -3,6 +3,9 @@ version = project(":").version
 
 dependencies {
   compile project(":")
+  compile "com.obsidiandynamics.fulcrum:fulcrum-threads:${fulcrumVersion}"
+  compile "com.obsidiandynamics.fulcrum:fulcrum-worker:${fulcrumVersion}"
+  compile "org.apache.commons:commons-lang3:${commonsLangVersion}"
 }
 
 jar {
