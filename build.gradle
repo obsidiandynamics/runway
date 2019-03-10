@@ -1,0 +1,250 @@
+plugins {
+  id "com.jfrog.bintray" version "1.8.4"
+  id "com.github.johnrengelman.shadow" version "4.0.4"
+  id "com.github.ben-manes.versions" version "0.20.0"
+}
+apply plugin: "maven-publish"
+apply plugin: "com.jfrog.bintray"
+
+group = "com.obsidiandynamics.blackstrom"
+version = "0.1.0-SNAPSHOT"
+  
+def envUser = "BINTRAY_USER"
+def envKey = "BINTRAY_KEY"
+task bintrayCredentialsCheck {
+  doLast {
+    if (System.getenv(envUser) == null) {
+      throw new GradleException("No Bintray username specified; set with 'export ${envUser}=<username>'")
+    }
+    if (System.getenv(envKey) == null) {
+      throw new GradleException("No Bintray key specified; set with 'export ${envKey}=<key>'")
+    }
+  }
+}
+
+def baseJvmArgs = [
+  "--add-opens=java.base/java.io=ALL-UNNAMED",
+  "--add-opens=java.base/java.lang=ALL-UNNAMED",
+  "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+  "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+  "--add-opens=java.base/java.nio=ALL-UNNAMED",
+  "--add-opens=java.base/java.util=ALL-UNNAMED",
+  "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+  "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+  "-XX:-MaxFDLimit"
+]
+project.ext.set("baseJvmArgs", baseJvmArgs)
+
+allprojects {
+  apply plugin: "java"
+  apply plugin: "jacoco"
+  apply plugin: "maven-publish"
+  apply plugin: "com.jfrog.bintray"
+  apply plugin: "com.github.johnrengelman.shadow"
+
+  sourceCompatibility = 11
+  targetCompatibility = 11
+
+  repositories {
+    jcenter()
+    maven {
+      url "https://oss.sonatype.org/content/repositories/snapshots"
+    }
+  }
+  
+  ext {
+    assertjVersion = "3.11.1"
+    equalsverifierVersion = "3.1.4"
+    fulcrumVersion = "0.29.0"
+    javassistVersion = "3.24.1-GA"
+    junitVersion = "4.12"
+    log4jVersion = "1.2.17"
+    mockitoVersion = "2.23.4"
+    pojotesterVersion = "0.7.6"
+    slf4jVersion = "1.7.25"
+    yconfVersion = "0.14.0"
+    zerologVersion = "0.25.0"
+  }
+  
+  dependencies {
+    testCompile "com.obsidiandynamics.fulcrum:fulcrum-assert:${fulcrumVersion}"
+    testCompile "com.obsidiandynamics.fulcrum:fulcrum-await:${fulcrumVersion}"
+    testCompile "com.obsidiandynamics.fulcrum:fulcrum-junit:${fulcrumVersion}"
+    testCompile "com.obsidiandynamics.yconf:yconf-snakeyaml:${yconfVersion}"
+    testCompile "junit:junit:${junitVersion}"
+    testCompile "org.mockito:mockito-core:${mockitoVersion}"
+    testCompile "nl.jqno.equalsverifier:equalsverifier:${equalsverifierVersion}"
+    testCompile "pl.pojo:pojo-tester:${pojotesterVersion}"
+    testCompile "org.assertj:assertj-core:${assertjVersion}"
+
+    testRuntime "com.obsidiandynamics.zerolog:zerolog-slf4j17:${zerologVersion}"
+    testRuntime "org.slf4j:slf4j-api:${slf4jVersion}"
+    testRuntime "org.slf4j:slf4j-log4j12:${slf4jVersion}"
+    testRuntime "log4j:log4j:${log4jVersion}"
+    // Dependency fix: pojo-tester:0.7.6 depends on javassist:3.22.x, which doesn't support Java 11;
+    // including javassist:3.24.x fixes this in the interim.
+    testRuntime "org.javassist:javassist:${javassistVersion}"
+  }
+    
+  compileJava {
+    options.compilerArgs += "-proc:none"
+    options.compilerArgs += "-Xlint:unchecked"
+  }
+
+  compileTestJava {
+    options.compilerArgs += "-proc:none"
+    options.compilerArgs += "-Xlint:unchecked"
+    options.compilerArgs += "-Xlint:deprecation"
+  }
+  
+  tasks.withType(JavaCompile) {
+    options.fork = true
+    options.incremental = true
+  }
+  
+  test {
+    exclude "**/*IT.class"
+    jvmArgs += baseJvmArgs
+  }
+  
+  task integrationTest(type: Test, description: "Runs integration tests", group: "Verification") {
+    include "**/*IT.class"
+    jvmArgs += baseJvmArgs
+  }
+
+  jacoco {
+    toolVersion = "0.8.3"
+  }
+  
+  task verify {  
+    dependsOn test
+    dependsOn integrationTest
+  }
+
+  jacocoTestReport {
+    additionalSourceDirs.from = files(sourceSets.main.allSource.srcDirs)
+    sourceDirectories.from = files(sourceSets.main.allSource.srcDirs)
+    classDirectories.from = files(sourceSets.main.output)
+    executionData.from = files("$buildDir/jacoco/test.exec") + files("$buildDir/jacoco/integrationTest.exec")
+    reports {
+      html.enabled true
+      xml.enabled true
+      csv.enabled false
+    }
+  }
+
+  // invoke this task when ready to publish to Bintray
+  bintrayUpload {
+    dependsOn ":bintrayCredentialsCheck"
+    dependsOn "jar"
+    dependsOn "sourcesJar"
+    dependsOn "javadocJar"
+    dependsOn "generatePomFileForMavenJavaPublication"
+  }
+}
+
+subprojects {
+  dependencies {
+    testCompile project(":").sourceSets.test.output
+  }
+}
+
+task jacocoRootReport(type: JacocoReport) {
+  mustRunAfter = allprojects.test + allprojects.integrationTest
+  additionalSourceDirs.from = files(allprojects.sourceSets.main.allSource.srcDirs)
+  sourceDirectories.from = files(allprojects.sourceSets.main.allSource.srcDirs)
+  classDirectories.from = files(allprojects.sourceSets.main.output)
+  executionData.from = files(allprojects.jacocoTestReport.executionData)
+  reports {
+    html.enabled true
+    xml.enabled true
+    csv.enabled false
+  }
+  onlyIf = {
+    true
+  }
+  doFirst {
+    executionData.from = files(executionData.findAll {
+      it.exists()
+    })
+  }
+  afterEvaluate {
+    classDirectories.from = files(classDirectories.files.collect {
+      fileTree(dir: it, exclude: ["sample/**", "**/*Uncovered*", "**/generated/**"])
+    })
+  }
+}
+
+def packageName = "runway-core"
+
+dependencies {}
+
+jar {
+  baseName packageName
+  finalizedBy jacocoRootReport
+}
+
+task javadocJar(type: Jar, dependsOn: javadoc) {
+  baseName packageName
+  classifier = "javadoc"
+  from "$buildDir/docs/javadoc"
+}
+ 
+task sourcesJar(type: Jar) {
+  baseName packageName
+  from sourceSets.main.allSource
+  classifier = "sources"
+}
+ 
+artifacts {
+  archives jar
+}
+
+publishing {
+  publications {
+	mavenJava(MavenPublication) {
+      from components.java
+      afterEvaluate {
+        groupId project(":").group
+        artifactId packageName
+        version project(":").version
+        artifact jar
+        artifact sourcesJar
+        artifact javadocJar
+      }
+    }
+  }
+  repositories {
+    maven {
+      url "${project(':').projectDir}/../repo"
+    }
+  }
+}
+
+def packageDesc = "Framework for event-driven, API-wielding applications"
+def repoName = "runway"
+bintray {
+  user = System.getenv(envUser)
+  key = System.getenv(envKey)
+  publications = ["mavenJava"]
+  pkg {
+    repo = "${repoName}"
+    name = packageName
+    userOrg = "obsidiandynamics"
+    desc = packageDesc
+    websiteUrl = "https://github.com/obsidiandynamics/${repoName}"
+    licenses = ["BSD New"]
+    vcsUrl = "https://github.com/obsidiandynamics/${repoName}"
+    issueTrackerUrl = "https://github.com/obsidiandynamics/${repoName}/issues"
+    publicDownloadNumbers = true
+    githubRepo = "obsidiandynamics/${repoName}"
+    override = true
+    publish = true
+    version {
+      name = project(":").version
+      desc = packageDesc
+      released  = new Date()
+      vcsTag = project(":").version
+    }
+  }
+}

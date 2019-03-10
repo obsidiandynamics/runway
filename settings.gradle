@@ -1,0 +1,5 @@
+rootProject.name = "runway"
+
+include "runway-capacitor"
+project(":runway-capacitor").projectDir = new File(settingsDir, "capacitor")
+

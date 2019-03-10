@@ -1,0 +1,15 @@
+commands:
+  build: ./gradlew build verify javadocJar --info --stacktrace --no-daemon
+  publish: ./gradlew -x test bintrayUpload --no-daemon
+modules:
+- path: .
+  dependencies:
+  - name: fulcrum
+    groupId: com.obsidiandynamics.fulcrum
+    artifactId: fulcrum-func
+  - name: yconf
+    groupId: com.obsidiandynamics.yconf
+    artifactId: yconf-core
+  - name: zerolog
+    groupId: com.obsidiandynamics.zerolog
+    artifactId: zerolog-core
